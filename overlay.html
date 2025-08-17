@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Live Cricket Overlay</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      font-family: Arial, sans-serif;
+    }
+    .overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0, 40, 100, 0.95);
+      color: white;
+      padding: 8px 15px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 16px;
+    }
+    .left-section {
+      display: flex;
+      flex-direction: column;
+      min-width: 200px;
+    }
+    .team-name {
+      font-weight: bold;
+      font-size: 16px;
+      margin-bottom: 4px;
+    }
+    .batsmen span {
+      font-size: 15px;
+      display: block;
+    }
+    .score-section {
+      text-align: center;
+      min-width: 160px;
+    }
+    .score {
+      font-size: 20px;
+      font-weight: bold;
+    }
+    .rr {
+      font-size: 14px;
+    }
+    .bowler-section {
+      min-width: 170px;
+      text-align: right;
+    }
+    .balls {
+      display: flex;
+      gap: 5px;
+      margin-top: 5px;
+      justify-content: flex-end;
+    }
+    .ball {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #ccc;
+    }
+    .ball.done {
+      background: #00ff99;
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay">
+    <!-- Left: Team + batsmen -->
+    <div class="left-section">
+      <div class="team-name" id="teamName">Team Name</div>
+      <div class="batsmen">
+        <span id="batsman1">Batsman 1</span>
+        <span id="batsman2">Batsman 2</span>
+      </div>
+    </div>
+
+    <!-- Center score info -->
+    <div class="score-section">
+      <div class="score" id="score">0-0 (0.0)</div>
+      <div class="rr">
+        RR: <span id="rr">0.00</span> | CRR: <span id="crr">0.00</span>
+      </div>
+    </div>
+
+    <!-- Right bowler info -->
+    <div class="bowler-section">
+      <div id="bowler">Bowler</div>
+      <div class="balls" id="balls"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL =
+      "https://cricheroes.com/_next/data/GWn-9wsDkpg5k-2hvyhaR/scorecard/18680256/individual/jaajssi-vs-jeeej/live.json";
+
+    async function loadScore() {
+      try {
+        const res = await fetch(API_URL);
+        const json = await res.json();
+        const data = json.pageProps.miniScorecard.data;
+
+        // Team name
+        document.getElementById("teamName").innerText = data.batting_team?.name || "Team";
+
+        // Batsmen
+        document.getElementById("batsman1").innerText =
+          (data.batsman_striker?.name || "") +
+          " " +
+          (data.batsman_striker?.runs || 0) +
+          "(" +
+          (data.batsman_striker?.balls || 0) +
+          ")";
+        document.getElementById("batsman2").innerText =
+          (data.batsman_non_striker?.name || "") +
+          " " +
+          (data.batsman_non_striker?.runs || 0) +
+          "(" +
+          (data.batsman_non_striker?.balls || 0) +
+          ")";
+
+        // Score
+        document.getElementById("score").innerText =
+          data.score + "-" + data.wickets + " (" + data.overs + ")";
+
+        // RR & CRR
+        document.getElementById("rr").innerText = data.required_run_rate ?? "0.00";
+        document.getElementById("crr").innerText = data.current_run_rate ?? "0.00";
+
+        // Bowler
+        document.getElementById("bowler").innerText =
+          (data.current_bowler?.name || "Bowler") +
+          " " +
+          (data.current_bowler?.runs_conceded || 0) +
+          "-" +
+          (data.current_bowler?.wickets || 0) +
+          " (" +
+          (data.current_bowler?.overs || 0) +
+          ")";
+
+        // Balls indicator
+        const ballsContainer = document.getElementById("balls");
+        ballsContainer.innerHTML = "";
+        for (let i = 0; i < 6; i++) {
+          const ball = document.createElement("div");
+          ball.classList.add("ball");
+          if (i < (data.this_over?.length || 0)) ball.classList.add("done");
+          ballsContainer.appendChild(ball);
+        }
+      } catch (err) {
+        console.error("Error fetching score:", err);
+      }
+    }
+
+    // Refresh every 10 sec
+    setInterval(loadScore, 10000);
+    loadScore();
+  </script>
+</body>
+  </html>
