@@ -2,65 +2,134 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Live Score Overlay</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Live Cricket Overlay</title>
   <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: transparent;
-      color: white;
+    :root{--bg:#002b5c;--fg:#fff;--muted:#cdd6f4}
+    *{box-sizing:border-box}
+    body{margin:0;background:transparent;font-family:Arial,Helvetica,sans-serif;color:var(--fg)}
+    .overlay{
+      position:fixed;left:0;right:0;bottom:0;
+      background:var(--bg);padding:10px 14px;
+      display:flex;align-items:center;justify-content:space-between;gap:16px;
+      font-size:14px
     }
-    .overlay {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: #003366;
-      color: white;
-      padding: 10px;
-      font-size: 14px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .team { font-weight: bold; }
-    .batsmen, .bowler { font-size: 12px; }
+    .left{min-width:200px}
+    .team{font-weight:700;font-size:16px;margin-bottom:4px}
+    .bline{opacity:.85}
+    .mid{text-align:center;min-width:160px}
+    .score{font-weight:700;font-size:18px}
+    .sub{font-size:12px;opacity:.85}
+    .right{text-align:right;min-width:180px}
+    .balls{display:flex;gap:6px;justify-content:flex-end;margin-top:6px}
+    .dot{width:12px;height:12px;border-radius:50%;background:#94a3b8}
+    .dot.on{background:#22c55e}
+    .warn{position:fixed;top:8px;left:8px;background:#0008;padding:6px 8px;border-radius:6px;font-size:12px}
   </style>
 </head>
 <body>
+  <div class="warn" id="hint" style="display:none"></div>
+
   <div class="overlay">
-    <div>
+    <div class="left">
       <div class="team" id="teamName">Team Name</div>
-      <div class="batsmen" id="batsmen">Batsman 1 | Batsman 2</div>
+      <div class="bline" id="bat1">Batsman 1</div>
+      <div class="bline" id="bat2">Batsman 2</div>
     </div>
-    <div id="score">0-0 (0.0)</div>
-    <div class="bowler" id="bowler">Bowler</div>
+
+    <div class="mid">
+      <div class="score" id="score">0-0 (0.0)</div>
+      <div class="sub">RR: <span id="rr">0.00</span> | CRR: <span id="crr">0.00</span></div>
+    </div>
+
+    <div class="right">
+      <div id="bowler">Bowler</div>
+      <div class="balls" id="balls"></div>
+    </div>
   </div>
 
   <script>
-    async function fetchScore() {
-      try {
-        const res = await fetch("https://cricheroes.com/_next/data/GWn-9wsDkpg5k-2hvyhaR/scorecard/18680256/individual/jaajssi-vs-jeejej/live.json");
-        const data = await res.json();
+    // 1) apna RENDER proxy yaha daalo:
+    const PROXY_BASE = "https://your-proxy.onrender.com"; // <-- REPLACE THIS!
 
-        const mini = data?.pageProps?.miniScorecard?.data;
-        if (!mini) return;
+    // 2) CricHeroes JSON link ko URL param 'src' se lo
+    // example: https://theprince123t-create.github.io/Tr/?src=https%3A%2F%2Fcricheroes.com%2F_next%2Fdata%2F...%2Flive.json
+    const qs = new URLSearchParams(location.search);
+    const SRC = qs.get("src");
 
-        document.getElementById("teamName").innerText = mini.batting_team?.name || "Team";
-        document.getElementById("score").innerText = `${mini.score}-${mini.wickets} (${mini.overs}.${mini.balls})`;
-        
-        const batsmen = mini.striker?.name + " | " + mini.non_striker?.name;
-        document.getElementById("batsmen").innerText = batsmen || "Batsman 1 | Batsman 2";
+    const hint = document.getElementById("hint");
+    if (!SRC) {
+      hint.style.display = "block";
+      hint.innerText = "Tip: URL me ?src=<encoded cricheroes live.json> pass karo.";
+    }
 
-        document.getElementById("bowler").innerText = mini.bowler?.name || "Bowler";
-      } catch (e) {
-        console.log("Error fetching score:", e);
+    function pickMini(obj){
+      // Try common paths safely
+      if (!obj) return null;
+      const p = obj.pageProps || {};
+      return (p.miniScorecard && p.miniScorecard.data)
+          || (p.data && p.data.miniScorecard && p.data.miniScorecard.data)
+          || null;
+    }
+
+    async function load(){
+      if (!SRC) return;
+
+      const url = `${PROXY_BASE}/proxy?url=${encodeURIComponent(SRC)}`;
+      try{
+        const r = await fetch(url, {cache:"no-store"});
+        const j = await r.json();
+        const d = pickMini(j);
+        if(!d) throw new Error("miniScorecard not found");
+
+        // Team
+        document.getElementById("teamName").innerText =
+          d.batting_team?.name || d.batting_team_name || "Team";
+
+        // Batsmen
+        const s = d.batsman_striker || d.striker || {};
+        const ns = d.batsman_non_striker || d.non_striker || {};
+        document.getElementById("bat1").innerText =
+          [s.name, s.runs!=null?`${s.runs}(${s.balls||0})`:null].filter(Boolean).join(" ");
+        document.getElementById("bat2").innerText =
+          [ns.name, ns.runs!=null?`${ns.runs}(${ns.balls||0})`:null].filter(Boolean).join(" ");
+
+        // Score + rates
+        const overs = d.overs || d.current_over || "0.0";
+        const score = (d.score!=null ? d.score : d.runs) ?? 0;
+        const wkts = d.wickets ?? d.wkts ?? 0;
+        document.getElementById("score").innerText = `${score}-${wkts} (${overs})`;
+        document.getElementById("rr").innerText = (d.required_run_rate ?? d.rr ?? 0).toString();
+        document.getElementById("crr").innerText = (d.current_run_rate ?? d.crr ?? 0).toString();
+
+        // Bowler
+        const bow = d.current_bowler || d.bowler || {};
+        let bowTxt = bow.name || "Bowler";
+        const fig = [];
+        if (bow.runs_conceded!=null && bow.wickets!=null) fig.push(`${bow.runs_conceded}-${bow.wickets}`);
+        if (bow.overs!=null) fig.push(`(${bow.overs})`);
+        if (fig.length) bowTxt += " " + fig.join(" ");
+        document.getElementById("bowler").innerText = bowTxt;
+
+        // Balls indicator (this over)
+        const balls = d.this_over || [];
+        const holder = document.getElementById("balls");
+        holder.innerHTML = "";
+        for(let i=0;i<6;i++){
+          const dot = document.createElement("div");
+          dot.className = "dot" + (i < balls.length ? " on" : "");
+          holder.appendChild(dot);
+        }
+      }catch(e){
+        console.error(e);
+        hint.style.display = "block";
+        hint.innerText = "Data load error. PROXY_BASE ya src check karo.";
       }
     }
 
-    fetchScore();
-    setInterval(fetchScore, 5000);
+    // refresh every 7s
+    load();
+    setInterval(load, 7000);
   </script>
 </body>
 </html>
